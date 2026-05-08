@@ -6,10 +6,10 @@ import google.generativeai as genai
 import os
 
 app = Flask(__name__)
-# Esto permite que tu HTML hable con este servidor sin bloqueos
 CORS(app)
 
-# Configuración de tu IA con tu clave
+# ¡OJO A ESTA LÍNEA! Si creaste una clave nueva, ponla aquí dentro.
+# Si sigue siendo la misma, déjala como está.
 genai.configure(api_key="AIzaSyB_ckCFc0Y3J1ZZc9IBJvutNZcwUzvvbWY")
 model = genai.GenerativeModel('gemini-1.5-flash')
 
@@ -21,35 +21,32 @@ def analizar():
     if not url:
         return jsonify({"error": "No has puesto una URL"}), 400
     
-    # Asegurar que la URL tenga http
     if not url.startswith('http'):
         url = 'https://' + url
 
     try:
-        # El agente visita la web
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        res = requests.get(url, headers=headers, timeout=10)
-        sopa = BeautifulSoup(res.text, 'html.parser')
+        # 1. Intentamos leer la web como si fuéramos un navegador real
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+        res = requests.get(url, headers=headers, timeout=15)
+        res.raise_for_status() # Esto nos avisa si la web da error 404
         
-        # Extraer texto relevante
+        sopa = BeautifulSoup(res.text, 'html.parser')
         contenido = sopa.get_text()[:3000]
         
-        # El agente razona y genera el informe
-        prompt = (
-            f"Analiza profesionalmente la web: {url}. "
-            f"Contenido: {contenido}. "
-            "Dime 3 errores específicos de SEO o diseño que les hacen perder dinero "
-            "y un consejo clave. Sé directo y profesional."
-        )
-        
+        # 2. Intentamos hablar con la IA
+        prompt = f"Analiza la web: {url}. Contenido: {contenido}. Dime 3 fallos y 1 consejo de ventas. Sé breve."
         respuesta_ia = model.generate_content(prompt)
         
         return jsonify({"informe": respuesta_ia.text})
     
-    except Exception as e:
-        return jsonify({"error": "La web no respondió a tiempo o es privada."}), 500
+    except requests.exceptions.RequestException as error_web:
+        # Si el error es al leer la web, nos lo dirá aquí
+        return jsonify({"error": f"Fallo al leer la web: {str(error_web)}"}), 500
+        
+    except Exception as error_ia:
+        # Si el error es de la clave API o de Google, nos lo dirá aquí
+        return jsonify({"error": f"Fallo en la Inteligencia Artificial: {str(error_ia)}"}), 500
 
 if __name__ == '__main__':
-    # IMPORTANTE: Render usa un puerto dinámico, esto lo soluciona
     puerto = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=puerto)
