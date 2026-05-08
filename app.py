@@ -6,9 +6,10 @@ import google.generativeai as genai
 import os
 
 app = Flask(__name__)
+# Esto permite que tu HTML hable con este servidor sin bloqueos
 CORS(app)
 
-# Tu clave ya integrada
+# Configuración de tu IA con tu clave
 genai.configure(api_key="AIzaSyB_ckCFc0Y3J1ZZc9IBJvutNZcwUzvvbWY")
 model = genai.GenerativeModel('gemini-1.5-flash')
 
@@ -16,25 +17,39 @@ model = genai.GenerativeModel('gemini-1.5-flash')
 def analizar():
     data = request.json
     url = data.get('url')
-    if not url:
-        return jsonify({"error": "URL no proporcionada"}), 400
     
+    if not url:
+        return jsonify({"error": "No has puesto una URL"}), 400
+    
+    # Asegurar que la URL tenga http
+    if not url.startswith('http'):
+        url = 'https://' + url
+
     try:
         # El agente visita la web
         headers = {'User-Agent': 'Mozilla/5.0'}
         res = requests.get(url, headers=headers, timeout=10)
         sopa = BeautifulSoup(res.text, 'html.parser')
-        contenido = sopa.get_text()[:3000] # Limite de texto para rapidez
         
-        # El agente genera el informe de dinero
-        prompt = f"Analiza esta web: {url}. Contenido: {contenido}. Dime 3 fallos de SEO/Ventas y un consejo para ganar dinero rápido con esta web. Sé breve."
+        # Extraer texto relevante
+        contenido = sopa.get_text()[:3000]
+        
+        # El agente razona y genera el informe
+        prompt = (
+            f"Analiza profesionalmente la web: {url}. "
+            f"Contenido: {contenido}. "
+            "Dime 3 errores específicos de SEO o diseño que les hacen perder dinero "
+            "y un consejo clave. Sé directo y profesional."
+        )
+        
         respuesta_ia = model.generate_content(prompt)
         
         return jsonify({"informe": respuesta_ia.text})
+    
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "La web no respondió a tiempo o es privada."}), 500
 
 if __name__ == '__main__':
-    # Esto permite que Render asigne el puerto automáticamente
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port)
+    # IMPORTANTE: Render usa un puerto dinámico, esto lo soluciona
+    puerto = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=puerto)
