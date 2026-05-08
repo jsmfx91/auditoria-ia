@@ -10,7 +10,7 @@ CORS(app)
 
 # ¡OJO A ESTA LÍNEA! Si creaste una clave nueva, ponla aquí dentro.
 # Si sigue siendo la misma, déjala como está.
-genai.configure(api_key="AIzaSyB_ckCFc0Y3J1ZZc9IBJvutNZcwUzvvbWY")
+genai.configure(api_key="AIzaSyAuj1QSKF9NRlMzgar0yPe48wqKFk-pE3g")
 model = genai.GenerativeModel('gemini-pro')
 
 @app.route('/analizar', methods=['POST'])
