@@ -8,8 +8,7 @@ import os
 app = Flask(__name__)
 CORS(app)
 
-# ¡OJO A ESTA LÍNEA! Si creaste una clave nueva, ponla aquí dentro.
-# Si sigue siendo la misma, déjala como está.
+# Configuración de tu IA con la nueva clave
 genai.configure(api_key="AIzaSyAuj1QSKF9NRlMzgar0yPe48wqKFk-pE3g")
 model = genai.GenerativeModel('gemini-pro')
 
@@ -28,7 +27,7 @@ def analizar():
         # 1. Intentamos leer la web como si fuéramos un navegador real
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
         res = requests.get(url, headers=headers, timeout=15)
-        res.raise_for_status() # Esto nos avisa si la web da error 404
+        res.raise_for_status() 
         
         sopa = BeautifulSoup(res.text, 'html.parser')
         contenido = sopa.get_text()[:3000]
@@ -40,11 +39,9 @@ def analizar():
         return jsonify({"informe": respuesta_ia.text})
     
     except requests.exceptions.RequestException as error_web:
-        # Si el error es al leer la web, nos lo dirá aquí
         return jsonify({"error": f"Fallo al leer la web: {str(error_web)}"}), 500
         
     except Exception as error_ia:
-        # Si el error es de la clave API o de Google, nos lo dirá aquí
         return jsonify({"error": f"Fallo en la Inteligencia Artificial: {str(error_ia)}"}), 500
 
 if __name__ == '__main__':
