@@ -7,7 +7,7 @@ import os
 app = Flask(__name__)
 CORS(app)
 
-# Tu clave API de Google
+# Tu clave API válida
 LLAVE_MAESTRA = "AIzaSyAuj1QSKF9NRlMzgar0yPe48wqKFk-pE3g"
 
 @app.route('/analizar', methods=['POST'])
@@ -30,10 +30,11 @@ def analizar():
         sopa = BeautifulSoup(res.text, 'html.parser')
         contenido = sopa.get_text()[:3000]
         
-        # 2. Conexión directa a la IA
-        prompt = f"Analiza la web: {url}. Contenido: {contenido}. Dime 3 fallos y 1 consejo de ventas. Sé breve."
+        # 2. Conexión directa a la IA usando el modelo universal
+        prompt = f"Analiza la web: {url}. Contenido: {contenido}. Dime 3 fallos y 1 consejo de ventas. Sé profesional y directo."
         
-        gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={LLAVE_MAESTRA}"
+        # EL CAMBIO MAESTRO: gemini-pro
+        gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={LLAVE_MAESTRA}"
         payload = {
             "contents": [{"parts": [{"text": prompt}]}]
         }
