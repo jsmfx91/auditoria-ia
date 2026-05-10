@@ -1,71 +1,83 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-import requests
-from bs4 import BeautifulSoup
-import os
-
-app = Flask(__name__)
-CORS(app)
-
-LLAVE_MAESTRA = os.environ.get("GEMINI_KEY")
-
-@app.route('/analizar', methods=['POST'])
-def analizar():
-    data = request.json
-    url = data.get('url')
-    
-    if not url: return jsonify({"error": "Falta URL"}), 400
-    if not LLAVE_MAESTRA: return jsonify({"error": "Falta GEMINI_KEY en Render"}), 500
-    if not url.startswith('http'): url = 'https://' + url
-
-    try:
-        # 1. Leer web
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        res = requests.get(url, headers=headers, timeout=12)
-        res.raise_for_status()
-        contenido = BeautifulSoup(res.text, 'html.parser').get_text(separator=' ', strip=True)[:2000]
-
-        # 2. AUTO-DESCUBRIMIENTO DE MODELO (Solución anti-bloqueos)
-        url_lista = f"https://generativelanguage.googleapis.com/v1beta/models?key={LLAVE_MAESTRA}"
-        res_lista = requests.get(url_lista).json()
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AI Web Auditor | Business Intelligence</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Fondo premium con degradado moderno */
+        body { 
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); 
+            min-height: 100vh; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-family: system-ui, -apple-system, sans-serif; 
+            margin: 0;
+            padding: 1rem;
+        }
+        /* Efecto cristal mejorado */
+        .glass-card { 
+            background: rgba(30, 41, 59, 0.6); 
+            backdrop-filter: blur(16px); 
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08); 
+            border-radius: 1.5rem; 
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        /* Animación suave para el informe */
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="text-slate-200">
+    <div class="w-full max-w-xl p-6 sm:p-10 glass-card mx-auto">
         
-        if 'error' in res_lista:
-            return jsonify({"error": f"Error de autenticación de Google: {res_lista['error']['message']}"}), 500
+        <div class="text-center mb-10">
+            <h1 class="text-4xl sm:text-5xl font-extrabold text-white mb-3 tracking-tight">
+                Web Auditor <span class="text-indigo-500">IA</span>
+            </h1>
+            <p class="text-base sm:text-lg text-slate-400 font-medium">
+                Detecta fallos críticos en tu web y deja de perder clientes hoy.
+            </p>
+        </div>
+
+        <div class="space-y-5">
+            <input type="url" id="urlInput" placeholder="Ej: www.tuempresa.com" 
+                   onkeypress="if(event.key === 'Enter') enviarAnalisis()"
+                   class="w-full bg-slate-900/80 border border-slate-700 p-5 sm:text-lg rounded-xl text-white outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/50 transition-all placeholder-slate-500 shadow-inner">
             
-        modelos_disponibles = []
-        if 'models' in res_lista:
-            # Filtramos solo los modelos que generan texto
-            modelos_disponibles = [m['name'] for m in res_lista['models'] if 'generateContent' in m.get('supportedGenerationMethods', [])]
-        
-        if not modelos_disponibles:
-            return jsonify({"error": "Tu clave de Google está restringida por región y no tiene modelos de texto asignados."}), 500
+            <button onclick="enviarAnalisis()" id="mainBtn" 
+                    class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-lg py-5 rounded-xl shadow-lg hover:shadow-indigo-500/30 transition-all transform active:scale-95 uppercase tracking-wide">
+                Analizar Web Gratis
+            </button>
+        </div>
 
-        # Seleccionamos el mejor modelo que Google te permita usar
-        modelo_elegido = modelos_disponibles[0] 
-        opciones_top = ["models/gemini-1.5-flash", "models/gemini-1.5-pro", "models/gemini-1.0-pro", "models/gemini-pro"]
-        for opc in opciones_top:
-            if opc in modelos_disponibles:
-                modelo_elegido = opc
-                break
-
-        # 3. CONEXIÓN CON EL MODELO EXACTO APROBADO
-        gemini_url = f"https://generativelanguage.googleapis.com/v1beta/{modelo_elegido}:generateContent?key={LLAVE_MAESTRA}"
-        
-        prompt = f"Analiza esta web: {url}. Contenido: {contenido}. Dime 3 fallos graves y 1 consejo de ventas. Sé profesional y breve."
-        payload = {"contents": [{"parts": [{"text": prompt}]}]}
-        
-        respuesta = requests.post(gemini_url, json=payload, headers={'Content-Type': 'application/json'})
-        datos = respuesta.json()
-        
-        if 'error' in datos:
-            return jsonify({"error": f"Fallo al usar {modelo_elegido}: {datos['error']['message']}"}), 500
+        <div id="resultadoArea" class="mt-10 hidden fade-in">
+            <div class="p-6 sm:p-8 bg-slate-900/80 rounded-2xl border border-slate-700 shadow-inner">
+                <h3 class="text-indigo-400 font-bold mb-4 text-lg border-b border-slate-700 pb-2">Resultados de la Auditoría</h3>
+                <p id="textoInforme" class="text-slate-300 text-base sm:text-lg leading-relaxed whitespace-pre-wrap"></p>
+            </div>
             
-        informe = datos['candidates'][0]['content']['parts'][0]['text']
-        return jsonify({"informe": informe})
+            <button onclick="window.open('AQUI_IRA_TU_ENLACE_DE_STRIPE', '_blank')" 
+                    class="w-full mt-6 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-lg sm:text-xl py-5 rounded-xl shadow-[0_0_20px_rgba(5,150,105,0.3)] hover:shadow-[0_0_30px_rgba(5,150,105,0.5)] transition-all transform hover:-translate-y-1 active:translate-y-0 active:scale-95 uppercase tracking-wide">
+                Solucionar con IA (19€)
+            </button>
+            <p class="text-center text-xs text-slate-500 mt-3 flex items-center justify-center gap-1">
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"></path></svg>
+                Pago 100% Seguro
+            </p>
+        </div>
+    </div>
 
-    except Exception as e:
-        return jsonify({"error": f"Error del sistema: {str(e)}"}), 500
-
-if __name__ == '__main__':
-    puerto = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=puerto)
+    <script>
+        async function enviarAnalisis() {
+            const urlValue = document.getElementById('urlInput').value;
+            const btn = document.getElementById('mainBtn');
+            const resArea = document.getElementById('resultado
