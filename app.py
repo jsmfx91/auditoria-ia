@@ -7,7 +7,7 @@ import os
 app = Flask(__name__)
 CORS(app)
 
-# Tu clave API (Mantén esta clave siempre protegida)
+# Tu clave API
 LLAVE_MAESTRA = "AIzaSyAuj1QSKF9NRlMzgar0yPe48wqKFk-pE3g"
 
 @app.route('/analizar', methods=['POST'])
@@ -22,7 +22,7 @@ def analizar():
         url = 'https://' + url
 
     try:
-        # 1. Leer la web simulando un navegador
+        # 1. Leer la web
         headers_web = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
         res = requests.get(url, headers=headers_web, timeout=15)
         res.raise_for_status() 
@@ -30,11 +30,11 @@ def analizar():
         sopa = BeautifulSoup(res.text, 'html.parser')
         contenido = sopa.get_text()[:3000]
         
-        # 2. Conexión directa a la IA usando la versión más estable
+        # 2. CONEXIÓN A LA API DE PRODUCCIÓN (v1)
         prompt = f"Analiza la web: {url}. Contenido: {contenido}. Dime 3 fallos y 1 consejo de ventas. Sé profesional y directo."
         
-        # URL corregida con el modelo -latest para evitar errores 404
-        gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={LLAVE_MAESTRA}"
+        # Cambio de v1beta a v1 para máxima compatibilidad
+        gemini_url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={LLAVE_MAESTRA}"
         
         payload = {
             "contents": [{"parts": [{"text": prompt}]}]
@@ -44,17 +44,15 @@ def analizar():
         datos_ia = respuesta_ia.json()
         
         if 'error' in datos_ia:
-            mensaje = datos_ia['error'].get('message', 'Error desconocido')
-            return jsonify({"error": f"Error de Google: {mensaje}"}), 500
+            return jsonify({"error": f"Google dice: {datos_ia['error']['message']}"}), 500
             
         informe = datos_ia['candidates'][0]['content']['parts'][0]['text']
         
         return jsonify({"informe": informe})
     
     except Exception as e:
-        return jsonify({"error": f"Fallo en el sistema: {str(e)}"}), 500
+        return jsonify({"error": "Error de conexión con la IA. Reintenta."}), 500
 
 if __name__ == '__main__':
-    # Render asigna el puerto automáticamente mediante la variable de entorno PORT
     puerto = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=puerto)
