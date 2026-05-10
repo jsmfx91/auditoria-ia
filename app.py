@@ -7,7 +7,6 @@ import os
 app = Flask(__name__)
 CORS(app)
 
-# Recupera la clave de la variable de entorno de Render
 LLAVE_MAESTRA = os.environ.get("GEMINI_KEY")
 
 @app.route('/analizar', methods=['POST'])
@@ -15,24 +14,20 @@ def analizar():
     data = request.json
     url = data.get('url')
     
-    if not url:
-        return jsonify({"error": "Falta la URL"}), 400
-    
-    if not LLAVE_MAESTRA:
-        return jsonify({"error": "No se encontró la GEMINI_KEY en Render"}), 500
+    if not url: return jsonify({"error": "Falta URL"}), 400
+    if not LLAVE_MAESTRA: return jsonify({"error": "Falta GEMINI_KEY en Render"}), 500
 
     if not url.startswith('http'):
         url = 'https://' + url
 
     try:
-        # 1. Leer la web
         headers = {'User-Agent': 'Mozilla/5.0'}
         res = requests.get(url, headers=headers, timeout=10)
         res.raise_for_status()
-        contenido = BeautifulSoup(res.text, 'html.parser').get_text()[:2000]
+        contenido = BeautifulSoup(res.text, 'html.parser').get_text()[:2500]
         
-        # 2. Conexión a la IA (Ajustada a la versión más estable)
-        gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={LLAVE_MAESTRA}"
+        # USAMOS GEMINI-PRO PARA MÁXIMA COMPATIBILIDAD
+        gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={LLAVE_MAESTRA}"
         
         payload = {
             "contents": [{"parts": [{"text": f"Analiza esta web: {url}. Contenido: {contenido}. Dime 3 fallos y 1 consejo de ventas. Sé breve."}]}]
@@ -41,7 +36,6 @@ def analizar():
         respuesta = requests.post(gemini_url, json=payload)
         datos = respuesta.json()
         
-        # Si Google da error, ahora nos dirá EXACTAMENTE qué pasa
         if 'error' in datos:
             return jsonify({"error": f"Google dice: {datos['error']['message']}"}), 500
             
