@@ -1,50 +1,62 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Web Auditor IA | Business Intelligence</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        /* Fondo con profundidad y gradiente profesional */
-        body { 
-            background: radial-gradient(circle at top right, #1e1b4b, #0f172a);
-            min-height: 100vh; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; 
-            margin: 0;
-            padding: 1.5rem;
-        }
-        /* Efecto de cristal esmerilado premium */
-        .glass-card { 
-            background: rgba(30, 41, 59, 0.7); 
-            backdrop-filter: blur(20px); 
-            -webkit-backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.1); 
-            border-radius: 2rem; 
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
-        }
-        /* Animación de entrada suave */
-        .fade-in {
-            animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        /* Personalización del scrollbar para el informe */
-        #textoInforme::-webkit-scrollbar { width: 6px; }
-        #textoInforme::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
-    </style>
-</head>
-<body class="text-slate-200">
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+import requests
+from bs4 import BeautifulSoup
+import os
 
-    <div class="w-full max-w-2xl p-8 sm:p-12 glass-card mx-auto fade-in">
+app = Flask(__name__)
+CORS(app)
+
+# La clave se lee de forma segura desde el panel de Render
+LLAVE_MAESTRA = os.environ.get("GEMINI_KEY")
+
+@app.route('/analizar', methods=['POST'])
+def analizar():
+    data = request.json
+    url = data.get('url')
+    
+    if not url: return jsonify({"error": "Falta URL"}), 400
+    if not LLAVE_MAESTRA: return jsonify({"error": "Falta GEMINI_KEY en Render"}), 500
+    if not url.startswith('http'): url = 'https://' + url
+
+    try:
+        # 1. Leer web
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+        res = requests.get(url, headers=headers, timeout=12)
+        res.raise_for_status()
+        contenido = BeautifulSoup(res.text, 'html.parser').get_text(separator=' ', strip=True)[:2000]
+
+        # 2. Descubrir modelo disponible
+        url_lista = f"https://generativelanguage.googleapis.com/v1beta/models?key={LLAVE_MAESTRA}"
+        res_lista = requests.get(url_lista).json()
         
-        <div class="text-center mb-12">
-            <div class="flex justify-center mb-6">
-                <svg width="80" height="80" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" class="drop-shadow-2xl">
-                    <circle cx="50" cy="50" r="48" stroke="url(#paint0_linear)" stroke-width="4"/>
-                    <path d="M35 50L4
+        if 'error' in res_lista:
+            return jsonify({"error": f"Error de Google: {res_lista['error']['message']}"}), 500
+            
+        modelos_disponibles = [m['name'] for m in res_lista['models'] if 'generateContent' in m.get('supportedGenerationMethods', [])]
+        
+        # Seleccionamos el mejor modelo
+        modelo_elegido = modelos_disponibles[0] 
+        prioridad = ["models/gemini-1.5-flash", "models/gemini-1.5-pro", "models/gemini-pro"]
+        for p in prioridad:
+            if p in modelos_disponibles:
+                modelo_elegido = p
+                break
+
+        # 3. Consultar a la IA
+        gemini_url = f"https://generativelanguage.googleapis.com/v1beta/{modelo_elegido}:generateContent?key={LLAVE_MAESTRA}"
+        prompt = f"Analiza esta web: {url}. Contenido: {contenido}. Dime 3 fallos graves y 1 consejo de ventas. Sé profesional y breve."
+        payload = {"contents": [{"parts": [{"text": prompt}]}]}
+        
+        respuesta = requests.post(gemini_url, json=payload)
+        datos = respuesta.json()
+        
+        informe = datos['candidates'][0]['content']['parts'][0]['text']
+        return jsonify({"informe": informe})
+
+    except Exception as e:
+        return jsonify({"error": f"Error del sistema: {str(e)}"}), 500
+
+if __name__ == '__main__':
+    puerto = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=puerto)
