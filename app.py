@@ -7,7 +7,6 @@ import os
 app = Flask(__name__)
 CORS(app)
 
-# La clave se extrae de forma segura desde el panel de Render
 LLAVE_MAESTRA = os.environ.get("GEMINI_KEY")
 
 @app.route('/analizar', methods=['POST'])
@@ -15,53 +14,57 @@ def analizar():
     data = request.json
     url = data.get('url')
     
-    # Validaciones iniciales de seguridad
-    if not url: 
-        return jsonify({"error": "Falta URL"}), 400
-    if not LLAVE_MAESTRA: 
-        return jsonify({"error": "Falta configurar GEMINI_KEY en Render"}), 500
-
-    if not url.startswith('http'):
-        url = 'https://' + url
+    if not url: return jsonify({"error": "Falta URL"}), 400
+    if not LLAVE_MAESTRA: return jsonify({"error": "Falta GEMINI_KEY en Render"}), 500
+    if not url.startswith('http'): url = 'https://' + url
 
     try:
-        # 1. Extracción de contenido web con evasión de bloqueos básicos
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+        # 1. Leer web
+        headers = {'User-Agent': 'Mozilla/5.0'}
         res = requests.get(url, headers=headers, timeout=12)
         res.raise_for_status()
+        contenido = BeautifulSoup(res.text, 'html.parser').get_text(separator=' ', strip=True)[:2000]
+
+        # 2. AUTO-DESCUBRIMIENTO DE MODELO (Solución anti-bloqueos)
+        url_lista = f"https://generativelanguage.googleapis.com/v1beta/models?key={LLAVE_MAESTRA}"
+        res_lista = requests.get(url_lista).json()
         
-        # Limpieza profesional del texto para no saturar a la IA
-        contenido = BeautifulSoup(res.text, 'html.parser').get_text(separator=' ', strip=True)[:2500]
+        if 'error' in res_lista:
+            return jsonify({"error": f"Error de autenticación de Google: {res_lista['error']['message']}"}), 500
+            
+        modelos_disponibles = []
+        if 'models' in res_lista:
+            # Filtramos solo los modelos que generan texto
+            modelos_disponibles = [m['name'] for m in res_lista['models'] if 'generateContent' in m.get('supportedGenerationMethods', [])]
         
-        # 2. Conexión a la ruta de PRODUCCIÓN EXACTA (Cero errores 404)
-        gemini_url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={LLAVE_MAESTRA}"
+        if not modelos_disponibles:
+            return jsonify({"error": "Tu clave de Google está restringida por región y no tiene modelos de texto asignados."}), 500
+
+        # Seleccionamos el mejor modelo que Google te permita usar
+        modelo_elegido = modelos_disponibles[0] 
+        opciones_top = ["models/gemini-1.5-flash", "models/gemini-1.5-pro", "models/gemini-1.0-pro", "models/gemini-pro"]
+        for opc in opciones_top:
+            if opc in modelos_disponibles:
+                modelo_elegido = opc
+                break
+
+        # 3. CONEXIÓN CON EL MODELO EXACTO APROBADO
+        gemini_url = f"https://generativelanguage.googleapis.com/v1beta/{modelo_elegido}:generateContent?key={LLAVE_MAESTRA}"
         
-        # Prompt mejorado y configuración de generación estructurada
-        prompt = f"Actúa como un experto consultor de negocios y optimización web (CRO). Analiza el siguiente texto extraído de la web {url}. Identifica 3 fallos graves que les estén haciendo perder clientes y proporciona 1 consejo accionable para aumentar sus ventas. Formatea la respuesta con viñetas claras.\n\nContenido:\n{contenido}"
-        
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "temperature": 0.7,
-                "maxOutputTokens": 800
-            }
-        }
+        prompt = f"Analiza esta web: {url}. Contenido: {contenido}. Dime 3 fallos graves y 1 consejo de ventas. Sé profesional y breve."
+        payload = {"contents": [{"parts": [{"text": prompt}]}]}
         
         respuesta = requests.post(gemini_url, json=payload, headers={'Content-Type': 'application/json'})
         datos = respuesta.json()
         
-        # Captura de errores directos de Google
         if 'error' in datos:
-            return jsonify({"error": f"API Google: {datos['error']['message']}"}), 500
+            return jsonify({"error": f"Fallo al usar {modelo_elegido}: {datos['error']['message']}"}), 500
             
-        # Extracción del informe exitoso
         informe = datos['candidates'][0]['content']['parts'][0]['text']
         return jsonify({"informe": informe})
 
-    except requests.exceptions.RequestException:
-        return jsonify({"error": "No se pudo acceder a la web. Es posible que tenga un escudo de seguridad activo."}), 500
     except Exception as e:
-        return jsonify({"error": f"Fallo en la arquitectura: {str(e)}"}), 500
+        return jsonify({"error": f"Error del sistema: {str(e)}"}), 500
 
 if __name__ == '__main__':
     puerto = int(os.environ.get("PORT", 5000))
